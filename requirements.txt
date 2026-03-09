@@ -1,8 +1,2 @@
 fastapi
 uvicorn
-web3
-eth-account
-sqlalchemy
-psycopg2-binary
-python-telegram-bot==20.3
-requests
