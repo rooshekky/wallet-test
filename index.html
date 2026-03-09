@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Crypto Wallet</title>
+
+<style>
+
+body{
+background:#0e0e11;
+color:white;
+font-family:Arial;
+margin:0;
+}
+
+.header{
+padding:20px;
+font-size:22px;
+font-weight:bold;
+background:#15151a;
+}
+
+.container{
+max-width:900px;
+margin:auto;
+padding:30px;
+}
+
+.card{
+background:#1c1c22;
+border-radius:12px;
+padding:25px;
+margin-bottom:20px;
+}
+
+.balance{
+font-size:40px;
+font-weight:bold;
+margin-top:10px;
+}
+
+.button{
+background:#4CAF50;
+padding:12px 18px;
+border-radius:8px;
+display:inline-block;
+margin-right:10px;
+margin-top:10px;
+cursor:pointer;
+}
+
+.assets{
+display:flex;
+gap:20px;
+}
+
+.asset{
+flex:1;
+background:#24242b;
+padding:15px;
+border-radius:8px;
+}
+
+.transactions{
+margin-top:20px;
+}
+
+.tx{
+padding:10px;
+border-bottom:1px solid #2e2e36;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="header">
+Wallet Dashboard
+</div>
+
+<div class="container">
+
+<div class="card">
+Balance
+<div class="balance" id="balance">0 ETH</div>
+
+<div class="button" onclick="deposit()">Deposit</div>
+<div class="button" onclick="withdraw()">Withdraw</div>
+</div>
+
+<div class="card assets">
+
+<div class="asset">
+ETH<br>
+<span id="eth">0</span>
+</div>
+
+<div class="asset">
+USDT<br>
+<span>0</span>
+</div>
+
+<div class="asset">
+SOL<br>
+<span>0</span>
+</div>
+
+</div>
+
+<div class="card transactions">
+Recent Transactions
+<div id="txlist"></div>
+</div>
+
+</div>
+
+<script>
+
+const API = "https://YOURDOMAIN.up.railway.app"
+const user = "alex"
+
+async function loadWallet(){
+
+let r = await fetch(API + "/wallet/" + user)
+let data = await r.json()
+
+document.getElementById("balance").innerText =
+data.balance + " ETH"
+
+document.getElementById("eth").innerText =
+data.balance
+
+}
+
+async function loadTransactions(){
+
+let r = await fetch(API + "/transactions")
+let tx = await r.json()
+
+let html = ""
+
+tx.forEach(t=>{
+html += `<div class="tx">
+${t.type} ${t.amount}
+</div>`
+})
+
+document.getElementById("txlist").innerHTML = html
+
+}
+
+function deposit(){
+alert("Send ETH to your wallet address")
+}
+
+function withdraw(){
+let addr = prompt("Send to address")
+let amt = prompt("Amount")
+
+fetch(API + "/withdraw/" + user + "/" + addr + "/" + amt)
+}
+
+loadWallet()
+loadTransactions()
+
+</script>
+
+</body>
+</html>
