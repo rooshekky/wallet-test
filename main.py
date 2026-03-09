@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
 import os
 import uvicorn
 from eth_account import Account
@@ -10,58 +11,109 @@ RPC = os.getenv("ETH_RPC", "https://rpc.ankr.com/eth")
 w3 = Web3(Web3.HTTPProvider(RPC))
 
 users = {}
+transactions = []
 
+# root check
 @app.get("/")
 def home():
     return {"wallet": "running"}
 
-# create wallet linked to telegram
-@app.get("/telegram/create/{telegram_id}")
-def create_wallet(telegram_id: str):
+# dashboard UI
+@app.get("/dashboard")
+def dashboard():
+    return FileResponse("index.html")
 
-    if telegram_id in users:
-        return users[telegram_id]
+# create user wallet
+@app.get("/user/create/{username}")
+def create_user(username: str):
+
+    if username in users:
+        return users[username]
 
     acct = Account.create()
 
-    users[telegram_id] = {
+    users[username] = {
         "address": acct.address,
         "private_key": acct.key.hex(),
         "balance": 0
     }
 
     return {
+        "username": username,
         "address": acct.address
     }
 
-# check balance
-@app.get("/telegram/balance/{telegram_id}")
-def balance(telegram_id: str):
+# view wallet
+@app.get("/wallet/{username}")
+def wallet(username: str):
 
-    user = users.get(telegram_id)
+    user = users.get(username)
 
     if not user:
-        return {"error": "wallet not found"}
+        return {"error": "user not found"}
 
     return {
         "address": user["address"],
         "balance": user["balance"]
     }
 
-# tip another telegram user
-@app.get("/telegram/tip/{from_id}/{to_id}/{amount}")
-def tip(from_id: str, to_id: str, amount: float):
+# tip between users
+@app.get("/tip/{from_user}/{to_user}/{amount}")
+def tip(from_user: str, to_user: str, amount: float):
 
-    if from_id not in users or to_id not in users:
+    if from_user not in users or to_user not in users:
         return {"error": "user not found"}
 
-    if users[from_id]["balance"] < amount:
+    if users[from_user]["balance"] < amount:
         return {"error": "insufficient balance"}
 
-    users[from_id]["balance"] -= amount
-    users[to_id]["balance"] += amount
+    users[from_user]["balance"] -= amount
+    users[to_user]["balance"] += amount
+
+    transactions.append({
+        "type": "tip",
+        "from": from_user,
+        "to": to_user,
+        "amount": amount
+    })
 
     return {"status": "tip sent"}
+
+# withdraw ETH
+@app.get("/withdraw/{username}/{to}/{amount}")
+def withdraw(username: str, to: str, amount: float):
+
+    user = users.get(username)
+
+    if not user:
+        return {"error": "user not found"}
+
+    acct = Account.from_key(user["private_key"])
+
+    tx = {
+        "to": to,
+        "value": w3.to_wei(amount, "ether"),
+        "gas": 21000,
+        "gasPrice": w3.eth.gas_price,
+        "nonce": w3.eth.get_transaction_count(acct.address)
+    }
+
+    signed = acct.sign_transaction(tx)
+    tx_hash = w3.eth.send_raw_transaction(signed.rawTransaction)
+
+    transactions.append({
+        "type": "withdraw",
+        "user": username,
+        "amount": amount,
+        "tx": tx_hash.hex()
+    })
+
+    return {"tx": tx_hash.hex()}
+
+# transaction history
+@app.get("/transactions")
+def history():
+    return transactions
 
 
 if __name__ == "__main__":
