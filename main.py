@@ -1,31 +1,13 @@
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
-from sqlalchemy import create_engine, Column, Integer, String, Float
-from sqlalchemy.orm import sessionmaker, declarative_base
-from eth_account import Account
-from web3 import Web3
-import os
-import uvicorn
 
-app = FastAPI()
+from wallet.database import engine,Session
+from wallet.models import User,Transaction,Base
+from wallet.wallet_engine import create_wallet,send_eth
 
-DATABASE_URL = os.getenv("DATABASE_URL","sqlite:///wallet.db")
+import uvicorn,os
 
-engine = create_engine(DATABASE_URL)
-Session = sessionmaker(bind=engine)
-Base = declarative_base()
-
-RPC = os.getenv("ETH_RPC","https://rpc.ankr.com/eth")
-w3 = Web3(Web3.HTTPProvider(RPC))
-
-class User(Base):
-    __tablename__ = "users"
-
-    id = Column(Integer, primary_key=True)
-    telegram_id = Column(String)
-    address = Column(String)
-    private_key = Column(String)
-    balance = Column(Float, default=0)
+app=FastAPI()
 
 Base.metadata.create_all(engine)
 
@@ -40,35 +22,32 @@ def dashboard():
 @app.get("/user/create/{telegram_id}")
 def create_user(telegram_id:str):
 
-    db = Session()
+    db=Session()
 
-    user = db.query(User).filter(User.telegram_id==telegram_id).first()
+    user=db.query(User).filter(User.telegram_id==telegram_id).first()
 
     if user:
         return {"address":user.address}
 
-    acct = Account.create()
+    address,key=create_wallet()
 
-    user = User(
+    user=User(
         telegram_id=telegram_id,
-        address=acct.address,
-        private_key=acct.key.hex(),
-        balance=0
+        address=address,
+        private_key=key
     )
 
     db.add(user)
     db.commit()
 
-    return {"address":acct.address}
+    return {"address":address}
 
 @app.get("/wallet/{telegram_id}")
 def wallet(telegram_id:str):
 
-    db = Session()
-    user = db.query(User).filter(User.telegram_id==telegram_id).first()
+    db=Session()
 
-    if not user:
-        return {"error":"not found"}
+    user=db.query(User).filter(User.telegram_id==telegram_id).first()
 
     return {
         "address":user.address,
@@ -78,25 +57,17 @@ def wallet(telegram_id:str):
 @app.get("/withdraw/{telegram_id}/{to}/{amount}")
 def withdraw(telegram_id:str,to:str,amount:float):
 
-    db = Session()
-    user = db.query(User).filter(User.telegram_id==telegram_id).first()
+    db=Session()
 
-    acct = Account.from_key(user.private_key)
+    user=db.query(User).filter(User.telegram_id==telegram_id).first()
 
-    tx = {
-        "to":to,
-        "value":w3.to_wei(amount,"ether"),
-        "gas":21000,
-        "gasPrice":w3.eth.gas_price,
-        "nonce":w3.eth.get_transaction_count(acct.address)
-    }
+    tx=send_eth(user.private_key,to,amount)
 
-    signed = acct.sign_transaction(tx)
+    return {"tx":tx}
 
-    tx_hash = w3.eth.send_raw_transaction(signed.rawTransaction)
 
-    return {"tx":tx_hash.hex()}
+if __name__=="__main__":
 
-if __name__ == "__main__":
     port=int(os.environ.get("PORT",8000))
+
     uvicorn.run(app,host="0.0.0.0",port=port)
