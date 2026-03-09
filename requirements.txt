@@ -1,2 +1,4 @@
 fastapi
 uvicorn
+web3
+eth-account
