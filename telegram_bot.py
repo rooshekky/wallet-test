@@ -1,54 +1,35 @@
 import requests
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram.ext import ApplicationBuilder,CommandHandler,ContextTypes
 
-API = "https://YOURDOMAIN.up.railway.app"
-BOT_TOKEN = "YOUR_TELEGRAM_TOKEN"
+API="https://YOURDOMAIN.up.railway.app"
+TOKEN="YOUR_TELEGRAM_TOKEN"
 
+async def start(update:Update,context:ContextTypes.DEFAULT_TYPE):
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid=update.effective_user.id
 
-    telegram_id = update.effective_user.id
-
-    r = requests.get(f"{API}/telegram/create/{telegram_id}")
-
-    wallet = r.json()
+    r=requests.get(f"{API}/user/create/{uid}")
+    data=r.json()
 
     await update.message.reply_text(
-        f"Wallet created\n\nAddress:\n{wallet['address']}"
+        f"Wallet created\n\n{data['address']}"
     )
 
+async def balance(update:Update,context:ContextTypes.DEFAULT_TYPE):
 
-async def balance(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid=update.effective_user.id
 
-    telegram_id = update.effective_user.id
-
-    r = requests.get(f"{API}/telegram/balance/{telegram_id}")
-
-    data = r.json()
+    r=requests.get(f"{API}/wallet/{uid}")
+    data=r.json()
 
     await update.message.reply_text(
         f"Balance: {data['balance']} ETH"
     )
 
+app=ApplicationBuilder().token(TOKEN).build()
 
-async def tip(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    from_id = update.effective_user.id
-    to_id = context.args[0]
-    amount = context.args[1]
-
-    requests.get(
-        f"{API}/telegram/tip/{from_id}/{to_id}/{amount}"
-    )
-
-    await update.message.reply_text("Tip sent")
-
-
-app = ApplicationBuilder().token(BOT_TOKEN).build()
-
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("balance", balance))
-app.add_handler(CommandHandler("tip", tip))
+app.add_handler(CommandHandler("start",start))
+app.add_handler(CommandHandler("balance",balance))
 
 app.run_polling()
