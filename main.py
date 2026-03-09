@@ -1,19 +1,20 @@
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
+from eth_account import Account
+from web3 import Web3
+import uvicorn
+import os
 
-from wallet.database import engine,Session
-from wallet.models import User,Transaction,Base
-from wallet.wallet_engine import create_wallet,send_eth
+app = FastAPI()
 
-import uvicorn,os
+RPC = os.getenv("ETH_RPC","https://rpc.ankr.com/eth")
+w3 = Web3(Web3.HTTPProvider(RPC))
 
-app=FastAPI()
-
-Base.metadata.create_all(engine)
+users = {}
 
 @app.get("/")
 def home():
-    return {"wallet":"running"}
+    return {"status":"running"}
 
 @app.get("/dashboard")
 def dashboard():
@@ -22,52 +23,49 @@ def dashboard():
 @app.get("/user/create/{telegram_id}")
 def create_user(telegram_id:str):
 
-    db=Session()
+    if telegram_id in users:
+        return users[telegram_id]
 
-    user=db.query(User).filter(User.telegram_id==telegram_id).first()
+    acct = Account.create()
 
-    if user:
-        return {"address":user.address}
+    users[telegram_id] = {
+        "address": acct.address,
+        "private_key": acct.key.hex(),
+        "balance": 0
+    }
 
-    address,key=create_wallet()
-
-    user=User(
-        telegram_id=telegram_id,
-        address=address,
-        private_key=key
-    )
-
-    db.add(user)
-    db.commit()
-
-    return {"address":address}
+    return {"address":acct.address}
 
 @app.get("/wallet/{telegram_id}")
 def wallet(telegram_id:str):
 
-    db=Session()
+    if telegram_id not in users:
+        return {"error":"user not found"}
 
-    user=db.query(User).filter(User.telegram_id==telegram_id).first()
-
-    return {
-        "address":user.address,
-        "balance":user.balance
-    }
+    return users[telegram_id]
 
 @app.get("/withdraw/{telegram_id}/{to}/{amount}")
 def withdraw(telegram_id:str,to:str,amount:float):
 
-    db=Session()
+    user = users.get(telegram_id)
 
-    user=db.query(User).filter(User.telegram_id==telegram_id).first()
+    acct = Account.from_key(user["private_key"])
 
-    tx=send_eth(user.private_key,to,amount)
+    tx = {
+        "to":to,
+        "value":w3.to_wei(amount,"ether"),
+        "gas":21000,
+        "gasPrice":w3.eth.gas_price,
+        "nonce":w3.eth.get_transaction_count(acct.address)
+    }
 
-    return {"tx":tx}
+    signed = acct.sign_transaction(tx)
+
+    tx_hash = w3.eth.send_raw_transaction(signed.rawTransaction)
+
+    return {"tx":tx_hash.hex()}
 
 
-if __name__=="__main__":
-
-    port=int(os.environ.get("PORT",8000))
-
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT",8000))
     uvicorn.run(app,host="0.0.0.0",port=port)
